@@ -1,0 +1,6 @@
+development:
+  sessions:
+    default:
+      database: billboard
+      hosts:
+        - localhost:27017
