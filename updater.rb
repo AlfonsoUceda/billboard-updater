@@ -3,20 +3,27 @@ require 'bundler/setup'
 require 'mongoid'
 require 'billboard-spanish'
 
+Dir["models/concerns/*.rb"].each { |file| require_relative file }
 Dir["models/*.rb"].each { |file| require_relative file }
+
+I18n.enforce_available_locales = false
+
+Mongoid.load!('config/mongoid.yml', :development)
+Mongoid::Tasks::Database.create_indexes
 
 class Updater
   attr_accessor :crawler
 
   def initialize(crawler_name)
     self.crawler = crawler_name
-    Mongoid.load!('config/mongoid.yml', :development)
   end
 
   def insert_provinces
     p 'INSERTING PROVINCES'
     provinces = crawler.provinces
-    Province.collection.insert provinces
+    provinces.each do |province|
+      Province.create province
+    end
     p "Province size: #{Province.count}"
     p '-----------------------------------'
   end
@@ -37,8 +44,12 @@ class Updater
     p 'INSERTING CINEMAS'
     City.all.each_with_index do |city, index|
       cinemas = crawler.cinemas(city.url)
-      cinemas.each do |cinema|
-        city.cinemas.create cinema
+      cinemas.each do |hash_cinema|
+        cinema = city.cinemas.find_or_initialize_by name: hash_cinema[:name]
+        if cinema.new_record?
+          cinema.url = hash_cinema[:url]
+          cinema.save
+        end
       end
     end
     p "Cinema size: #{Cinema.count}"
@@ -60,26 +71,23 @@ class Updater
       end
       p "FILMS FOR CINEMA #{cinema.name} INSERTED"
     end
-    p "Film size: #{Film.count}"
     p '-----------------------------------'
   end
 
   private
 
   def crawler=(name)
-    self.crawler = Object.const_get("Billboard::Crawlers::#{name.to_s.capitalize}").new
-  rescue Exception
-    p 'Crawler no disponible'
+    @crawler = Object.const_get("Billboard::Crawlers::#{name.to_s.capitalize}").new
   end
 end
 
-# updater = Updater.new
-#
+updater = Updater.new :ecartelera
+
 # Cinema.destroy_all
 # City.destroy_all
 # Province.destroy_all
-#
+
 # updater.insert_provinces
 # updater.insert_cities
-# updater.insert_cinemas
-# updater.insert_films
+updater.insert_cinemas
+updater.insert_films
