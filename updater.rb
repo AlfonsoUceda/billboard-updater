@@ -1,18 +1,21 @@
 require 'rubygems'
 require 'bundler/setup'
 require 'mongoid'
-require 'billboard'
+require 'billboard-spanish'
 
 Dir["models/*.rb"].each { |file| require_relative file }
 
 class Updater
-  def initialize
+  attr_accessor :crawler
+
+  def initialize(crawler_name)
+    self.crawler = crawler_name
     Mongoid.load!('config/mongoid.yml', :development)
   end
 
   def insert_provinces
     p 'INSERTING PROVINCES'
-    provinces = fetcher.provinces
+    provinces = crawler.provinces
     Province.collection.insert provinces
     p "Province size: #{Province.count}"
     p '-----------------------------------'
@@ -21,7 +24,7 @@ class Updater
   def insert_cities
     p 'INSERTING CITIES'
     Province.all.each_with_index do |province, index|
-      cities = fetcher.cities(province.url)
+      cities = crawler.cities(province.url)
       cities.each do |city|
         province.cities.create city
       end
@@ -33,7 +36,7 @@ class Updater
   def insert_cinemas
     p 'INSERTING CINEMAS'
     City.all.each_with_index do |city, index|
-      cinemas = fetcher.cinemas(city.url)
+      cinemas = crawler.cinemas(city.url)
       cinemas.each do |cinema|
         city.cinemas.create cinema
       end
@@ -45,7 +48,7 @@ class Updater
   def insert_films
     p 'INSERTING FILMS'
     Cinema.all.each_with_index do |cinema, index|
-      proyection_dates = fetcher.films(cinema.url)
+      proyection_dates = crawler.films(cinema.url)
       proyection_dates.each do |proyection_date, films|
         films.each do |film|
           hours = film.delete :hours
@@ -63,8 +66,10 @@ class Updater
 
   private
 
-  def fetcher
-    @fetcher ||= Billboard::Fetcher.new
+  def crawler=(name)
+    self.crawler = Object.const_get("Billboard::Crawlers::#{name.to_s.capitalize}").new
+  rescue Exception
+    p 'Crawler no disponible'
   end
 end
 
